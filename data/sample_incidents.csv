@@ -1,0 +1,3 @@
+Incident ID,Short Description,Description,Priority,Status,Application,RCA,Resolution,Environment,Country
+INC-2001,Authentication service unavailable,Health checks fail after configuration change,P1,Resolved,Identity,Invalid endpoint configuration,Restore endpoint and validate health checks,Production,India
+INC-2002,Database connection errors,Intermittent timeout from payment API,P2,Resolved,Payments,Database connection saturation,Tune pool and validate database capacity,Production,Germany

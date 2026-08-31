@@ -1,0 +1,3 @@
+Issue Key,Summary,Description,Priority,Status,Application,Root Cause,Resolution,Environment,Country
+DEF-1001,Login timeout after release,Users cannot log in after deployment,P1,Closed,Identity,Connection pool exhausted,Increase pool and restart service,Production,India
+DEF-1002,Payment callback delayed,Callback queue grows during peak,P2,Closed,Payments,Consumer concurrency too low,Scale consumers and monitor lag,Production,Germany

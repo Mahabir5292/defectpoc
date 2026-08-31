@@ -1,0 +1,66 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [triage]
+
+  qdrant:
+    image: qdrant/qdrant:v1.15.3
+    restart: unless-stopped
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "bash", "-c", ": > /dev/tcp/127.0.0.1/6333"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [triage]
+
+  backend:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    command: uvicorn app.api:app --host 0.0.0.0 --port 8000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    volumes:
+      - hf_cache:/models/huggingface
+    ports:
+      - "8000:8000"
+    networks: [triage]
+
+  ui:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      BACKEND_URL: http://backend:8000
+    command: streamlit run app/ui.py --server.address 0.0.0.0 --server.port 8501
+    depends_on:
+      - backend
+    ports:
+      - "8501:8501"
+    networks: [triage]
+
+networks:
+  triage:
+volumes:
+  postgres_data:
+  qdrant_data:
+  hf_cache:
