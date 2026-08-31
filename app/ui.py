@@ -1,5 +1,5 @@
 import os, requests, streamlit as st
-BASE=os.getenv('BACKEND_URL','http://localhost:8000')
+BASE=os.getenv('BACKEND_URL','http://localhost:8001')
 st.set_page_config(page_title='Defect Triage RAG',layout='wide')
 st.title('Enterprise Defect & Incident Triage')
 with st.sidebar:
