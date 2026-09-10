@@ -20,6 +20,8 @@ services:
   qdrant:
     image: qdrant/qdrant:v1.15.3
     restart: unless-stopped
+    ports:
+      - "6333:6333"
     volumes:
       - qdrant_data:/qdrant/storage
     healthcheck:
