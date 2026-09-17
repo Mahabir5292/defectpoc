@@ -1,25 +1,118 @@
 from functools import lru_cache
-from .config import settings
+
+import torch
+
 from .aws_clients import bedrock_generate
+from .config import settings
+
 
 @lru_cache(maxsize=1)
-def _hf_pipeline():
-    from transformers import pipeline
-    device = -1 if settings.hf_device.lower() == 'cpu' else 0
-    return pipeline('text-generation', model=settings.hf_model_id, tokenizer=settings.hf_model_id, device=device, model_kwargs={'low_cpu_mem_usage': True}, cache_dir=settings.hf_cache_dir)
+def _hf_components():
+    from transformers import (
+        AutoModelForCausalLM,
+        AutoTokenizer,
+    )
 
-def generate(system_prompt: str, user_prompt: str) -> str:
+    torch.set_num_threads(settings.hf_torch_threads)
+
+    tokenizer = AutoTokenizer.from_pretrained(
+        settings.hf_model_id,
+        cache_dir=settings.hf_cache_dir,
+        use_fast=True,
+    )
+
+    model = AutoModelForCausalLM.from_pretrained(
+        settings.hf_model_id,
+        cache_dir=settings.hf_cache_dir,
+        torch_dtype=torch.float32,
+        low_cpu_mem_usage=True,
+    )
+
+    model.eval()
+
+    return tokenizer, model
+
+
+def huggingface_generate(
+    system_prompt,
+    user_prompt,
+):
+    tokenizer, model = _hf_components()
+
+    messages = [
+        {
+            "role": "system",
+            "content": system_prompt,
+        },
+        {
+            "role": "user",
+            "content": user_prompt,
+        },
+    ]
+
+    prompt = tokenizer.apply_chat_template(
+        messages,
+        tokenize=False,
+        add_generation_prompt=True,
+    )
+
+    model_inputs = tokenizer(
+        prompt,
+        return_tensors="pt",
+        truncation=True,
+        max_length=12000,
+    )
+
+    generation_arguments = {
+        "max_new_tokens": settings.hf_max_new_tokens,
+        "do_sample": settings.hf_temperature > 0,
+        "repetition_penalty": 1.05,
+        "pad_token_id": tokenizer.eos_token_id,
+        "eos_token_id": tokenizer.eos_token_id,
+    }
+
+    if settings.hf_temperature > 0:
+        generation_arguments["temperature"] = (
+            settings.hf_temperature
+        )
+        generation_arguments["top_p"] = 0.9
+
+    with torch.inference_mode():
+        output = model.generate(
+            **model_inputs,
+            **generation_arguments,
+        )
+
+    generated_tokens = output[
+        0,
+        model_inputs["input_ids"].shape[1]:,
+    ]
+
+    return tokenizer.decode(
+        generated_tokens,
+        skip_special_tokens=True,
+    ).strip()
+
+
+def generate(system_prompt, user_prompt):
     provider = settings.llm_provider.lower().strip()
-    if provider == 'none':
-        return ''
-    if provider == 'bedrock':
-        return bedrock_generate(system_prompt, user_prompt)
-    if provider != 'huggingface':
-        raise RuntimeError(f'Unsupported LLM_PROVIDER={settings.llm_provider}')
-    pipe = _hf_pipeline()
-    messages = [{'role': 'system', 'content': system_prompt}, {'role': 'user', 'content': user_prompt}]
-    output = pipe(messages, max_new_tokens=settings.hf_max_new_tokens, do_sample=settings.hf_temperature > 0, temperature=max(settings.hf_temperature, 0.01), return_full_text=False)
-    generated = output[0]['generated_text']
-    if isinstance(generated, list):
-        return generated[-1].get('content', str(generated[-1]))
-    return str(generated)
+
+    if provider == "none":
+        return ""
+
+    if provider == "bedrock":
+        return bedrock_generate(
+            system_prompt,
+            user_prompt,
+        )
+
+    if provider == "huggingface":
+        return huggingface_generate(
+            system_prompt,
+            user_prompt,
+        )
+
+    raise RuntimeError(
+        f"Unsupported LLM_PROVIDER="
+        f"{settings.llm_provider}"
+    )

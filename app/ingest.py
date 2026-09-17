@@ -23,8 +23,12 @@ def ingest_key(key,ticket_type):
             if not body: stats['skipped']+=1; continue
             vector=embed(body); db_row={**ticket,'raw_metadata':json.dumps(ticket['raw_metadata'],default=str)}
             with engine.begin() as conn: conn.execute(UPSERT,db_row)
-            payload={k:ticket.get(k) for k in ['ticket_id','ticket_type','application','component','priority','severity','status','environment','country','market','resolver_group','created_at']}
-            payload={k:(v.isoformat() if hasattr(v,'isoformat') else v) for k,v in payload.items() if v is not None}
+            payload_fields = ["ticket_id","ticket_type","application","component","priority","severity","status","environment","country","market","resolver_group","created_at","summary"]
+
+            payload = {field: ticket.get(field) for field in payload_fields}
+            payload = {key: (value.isoformat() if hasattr(value, "isoformat") else value) for key, value in payload.items() if value is not None}
+            #payload={k:ticket.get(k) for k in ['ticket_id','ticket_type','application','component','priority','severity','status','environment','country','market','resolver_group','created_at']}
+            #payload={k:(v.isoformat() if hasattr(v,'isoformat') else v) for k,v in payload.items() if v is not None}
             qdrant.upsert(settings.qdrant_collection,[models.PointStruct(id=point_id(ticket['ticket_id']),vector=vector,payload=payload)])
             stats['upserted']+=1
         except Exception as exc: stats['errors'].append({'row':int(i)+2,'error':str(exc)[:500]})
